@@ -1,0 +1,1681 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>超現實立體畫框 - 3D 互動展示</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Three.js 與 OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #1a1612;
+            user-select: none;
+        }
+        .serif-title {
+            font-family: 'Noto Serif TC', serif;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        .glass-panel {
+            background: rgba(28, 24, 20, 0.78);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        .gold-btn {
+            background: linear-gradient(135deg, rgba(60, 48, 34, 0.9), rgba(38, 30, 22, 0.9));
+            border: 1px solid rgba(212, 175, 55, 0.4);
+            color: #f3e5ab;
+            transition: all 0.25s ease;
+        }
+        .gold-btn:hover, .gold-btn.active {
+            background: linear-gradient(135deg, #c59b27, #8a6611);
+            color: #fff;
+            border-color: #ffe885;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(197, 155, 39, 0.35);
+        }
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.15);
+            height: 6px;
+            border-radius: 4px;
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #e5c158;
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        }
+        .toast-msg {
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+    </style>
+</head>
+<body class="relative">
+
+    <!-- 3D 畫布容器 -->
+    <div id="canvas-container"></div>
+
+    <!-- 頂部標題與互動提示列 -->
+    <div class="fixed top-4 left-4 right-4 md:left-6 md:right-auto z-10 pointer-events-none flex flex-col gap-2 max-w-md">
+        <div class="glass-panel rounded-2xl px-5 py-3.5 pointer-events-auto">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <span class="text-xs uppercase tracking-widest text-amber-400/90 font-semibold block">3D Interactive Diorama</span>
+                    <h1 class="serif-title text-xl md:text-2xl font-bold text-amber-50">《破框而出的春日澆灌》</h1>
+                </div>
+                <button id="toggle-ui-btn" class="md:hidden gold-btn px-3 py-1.5 rounded-lg text-xs font-medium">
+                    收合選單
+                </button>
+            </div>
+            <p class="text-xs text-stone-300 mt-1.5 leading-relaxed">
+                拖曳滑鼠旋轉 360° 視角、滾輪縮放。試著<span class="text-amber-300 font-medium">點擊畫中女孩、澆水壺、地板水窪、立燈或青蘋果</span>觸發驚喜互動！
+            </p>
+        </div>
+
+        <!-- 動態互動回饋提示 -->
+        <div id="toast" class="toast-msg opacity-0 -translate-y-2 glass-panel rounded-xl px-4 py-2.5 text-amber-200 text-xs font-medium flex items-center gap-2 self-start">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+            <span id="toast-text">已觸發互動！</span>
+        </div>
+    </div>
+
+    <!-- 右側控制面板 -->
+    <div id="control-panel" class="fixed bottom-4 right-4 left-4 md:left-auto md:top-4 md:bottom-auto md:w-80 z-10 glass-panel rounded-2xl p-4 text-stone-100 flex flex-col gap-4 max-h-[82vh] overflow-y-auto">
+        
+        <!-- 鏡頭快速視角 -->
+        <div>
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold tracking-wider text-amber-300 uppercase">快速鏡頭視角</span>
+                <span class="text-[11px] text-stone-400">點擊平滑切換</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <button data-cam="overview" class="cam-btn gold-btn active py-2 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5">
+                    <span>🖼️</span> 正面全景
+                </button>
+                <button data-cam="portal" class="cam-btn gold-btn py-2 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5">
+                    <span>🌻</span> 畫框破界特寫
+                </button>
+                <button data-cam="puddle" class="cam-btn gold-btn py-2 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5">
+                    <span>💧</span> 地板水窪視角
+                </button>
+                <button data-cam="sofa" class="cam-btn gold-btn py-2 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5">
+                    <span>🛋️</span> 沙發側視角
+                </button>
+            </div>
+        </div>
+
+        <hr class="border-amber-500/20">
+
+        <!-- 動態參數控制 -->
+        <div class="space-y-3">
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="text-stone-200 font-medium">🚿 澆水水量控制</span>
+                    <span id="water-val-label" class="text-amber-300 font-mono">100%</span>
+                </div>
+                <input id="water-slider" type="range" min="0" max="200" value="100">
+            </div>
+
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="text-stone-200 font-medium">✨ 畫框立體破界深度</span>
+                    <span id="depth-val-label" class="text-amber-300 font-mono">100%</span>
+                </div>
+                <input id="depth-slider" type="range" min="20" max="170" value="100">
+            </div>
+        </div>
+
+        <hr class="border-amber-500/20">
+
+        <!-- 室內燈光氛圍 -->
+        <div>
+            <span class="text-xs font-semibold tracking-wider text-amber-300 uppercase block mb-2">室內光影氛圍</span>
+            <div class="grid grid-cols-3 gap-1.5">
+                <button data-light="afternoon" class="light-btn gold-btn active py-1.5 px-2 rounded-lg text-xs font-medium">
+                    ☀️ 溫暖午後
+                </button>
+                <button data-light="golden" class="light-btn gold-btn py-1.5 px-2 rounded-lg text-xs font-medium">
+                    🌇 黃昏微光
+                </button>
+                <button data-light="night" class="light-btn gold-btn py-1.5 px-2 rounded-lg text-xs font-medium">
+                    🌙 夜間立燈
+                </button>
+            </div>
+        </div>
+
+        <!-- 互動快捷與自動環繞 -->
+        <div class="flex items-center justify-between pt-1 gap-2">
+            <button id="splash-btn" class="flex-1 gold-btn py-2 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5">
+                <span>🌊</span> 傾倒大水花
+            </button>
+            <button id="autorotate-btn" class="flex-1 gold-btn py-2 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5">
+                <span>🔄</span> 自動環繞：關
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. 產生程序化質感貼圖 (油畫筆觸、木地板、波斯地毯、復古金框)
+        // ==========================================
+        function createWoodFloorTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#8b5e34';
+            ctx.fillRect(0, 0, 512, 512);
+
+            const planks = 8;
+            const plankH = 512 / planks;
+            for (let i = 0; i < planks; i++) {
+                const y = i * plankH;
+                const hueShift = (Math.random() - 0.5) * 14;
+                ctx.fillStyle = `hsl(${28 + hueShift}, 46%, ${36 + (i % 2) * 3}%)`;
+                ctx.fillRect(0, y, 512, plankH - 2);
+
+                // 木紋線條
+                ctx.strokeStyle = 'rgba(60, 35, 15, 0.18)';
+                ctx.lineWidth = 1.5;
+                for (let g = 0; g < 14; g++) {
+                    ctx.beginPath();
+                    const gy = y + Math.random() * plankH;
+                    ctx.moveTo(0, gy);
+                    ctx.bezierCurveTo(170, gy + (Math.random() - 0.5) * 10, 340, gy + (Math.random() - 0.5) * 10, 512, gy);
+                    ctx.stroke();
+                }
+
+                // 拼接縫隙
+                ctx.fillStyle = '#4a2c11';
+                ctx.fillRect(0, y + plankH - 2, 512, 2);
+                const jointX = ((i * 173) % 400) + 50;
+                ctx.fillRect(jointX, y, 2, plankH);
+            }
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(4, 3);
+            return tex;
+        }
+
+        function createRugTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 384;
+            const ctx = canvas.getContext('2d');
+
+            // 米灰復古底色
+            ctx.fillStyle = '#b9ab96';
+            ctx.fillRect(0, 0, 512, 384);
+
+            // 編織紋理噪點
+            for (let i = 0; i < 6000; i++) {
+                ctx.fillStyle = i % 2 === 0 ? 'rgba(90,75,60,0.08)' : 'rgba(240,230,215,0.08)';
+                ctx.fillRect(Math.random() * 512, Math.random() * 384, 3, 2);
+            }
+
+            // 外框古典幾何花邊
+            ctx.strokeStyle = '#6e5a46';
+            ctx.lineWidth = 12;
+            ctx.strokeRect(20, 20, 472, 344);
+
+            ctx.strokeStyle = '#8c4a32';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(36, 36, 440, 312);
+
+            // 中央古典圖騰
+            ctx.fillStyle = 'rgba(110, 90, 70, 0.25)';
+            ctx.beginPath();
+            ctx.ellipse(256, 192, 150, 95, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            for (let x = 60; x <= 452; x += 28) {
+                ctx.fillStyle = '#5c4b3b';
+                ctx.fillRect(x, 22, 8, 8);
+                ctx.fillRect(x, 354, 8, 8);
+            }
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createOilPaintingBackdropTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 640;
+            const ctx = canvas.getContext('2d');
+
+            // 溫暖陽光石牆與藍天漸層底色
+            const grad = ctx.createLinearGradient(0, 0, 512, 640);
+            grad.addColorStop(0, '#89a7b8');
+            grad.addColorStop(0.35, '#d8c9a7');
+            grad.addColorStop(0.75, '#c7b083');
+            grad.addColorStop(1, '#9d845b');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 512, 640);
+
+            // 印象派油畫筆觸效果 (陽光斑駁石板地與花牆)
+            const palette = [
+                '#e6d7b2', '#d2be92', '#8ba8b5', '#a9c1ca',
+                '#496b2e', '#658b38', '#335220', '#c9a66b', '#b8945a'
+            ];
+            for (let i = 0; i < 4500; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 640;
+                // 左側偏綠叢，右下方偏石板路陽光斑駁
+                let color;
+                if (x < 210) {
+                    const greens = ['#2f4f1d', '#496e2c', '#6a8f3d', '#84a852', '#3a5a24'];
+                    color = greens[Math.floor(Math.random() * greens.length)];
+                } else if (y > 380) {
+                    const stones = ['#d8c396', '#b89e6e', '#947e57', '#e5d4ae', '#7d6b4d'];
+                    color = stones[Math.floor(Math.random() * stones.length)];
+                } else {
+                    color = palette[Math.floor(Math.random() * palette.length)];
+                }
+                ctx.fillStyle = color;
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate((Math.random() - 0.5) * 0.8);
+                ctx.fillRect(-7, -3, 14 + Math.random() * 8, 6 + Math.random() * 4);
+                ctx.restore();
+            }
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // ==========================================
+        // 2. 初始化場景、相機與渲染器
+        // ==========================================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1f1b17);
+        scene.fog = new THREE.FogExp2(0x1f1b17, 0.022);
+
+        const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(-1.3, 2.35, 6.6);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.08;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(0.15, 2.05, 0);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.06;
+        controls.maxPolarAngle = Math.PI / 2 - 0.02; // 避免穿入地板下
+        controls.minDistance = 2.0;
+        controls.maxDistance = 13.0;
+
+        // 儲存可點擊互動的物件清單
+        const interactables = [];
+        function registerInteractable(mesh, name, handler) {
+            mesh.userData.interactName = name;
+            mesh.userData.onClick = handler;
+            interactables.push(mesh);
+        }
+
+        // ==========================================
+        // 3. 燈光系統（支援三種氛圍切換 + 立燈開關）
+        // ==========================================
+        const ambientLight = new THREE.AmbientLight(0xfff3e0, 0.58);
+        scene.add(ambientLight);
+
+        // 主陽光（從左前方斜射入客廳）
+        const sunLight = new THREE.DirectionalLight(0xfff1d6, 1.15);
+        sunLight.position.set(-5.5, 6.8, 5.5);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 20;
+        const d = 6;
+        sunLight.shadow.camera.left = -d;
+        sunLight.shadow.camera.right = d;
+        sunLight.shadow.camera.top = d;
+        sunLight.shadow.camera.bottom = -d;
+        sunLight.shadow.bias = -0.0005;
+        scene.add(sunLight);
+
+        // 畫框內部的地中海陽光點光源（讓畫框內部永遠明亮立體）
+        const portalLight = new THREE.PointLight(0xfffaed, 1.1, 5.5);
+        portalLight.position.set(0.7, 3.1, -0.1);
+        scene.add(portalLight);
+
+        // 立燈的暖黃光源
+        const floorLampLight = new THREE.PointLight(0xffb74d, 0.95, 6.5);
+        floorLampLight.position.set(-2.65, 2.55, -0.75);
+        floorLampLight.castShadow = true;
+        scene.add(floorLampLight);
+
+        let lampIsOn = true;
+
+        // ==========================================
+        // 4. 建立客廳建築結構（牆面、踢腳線、木地板、地毯）
+        // ==========================================
+        const roomGroup = new THREE.Group();
+        scene.add(roomGroup);
+
+        // 溫潤米白主牆面 (預留中央畫框凹槽，由四塊拼成，讓畫框內部真正凹入牆體)
+        const wallMat = new THREE.MeshStandardMaterial({
+            color: 0xd8cbb8,
+            roughness: 0.88,
+            metalness: 0.02
+        });
+
+        // 畫框中心位於 (0.65, 2.75, 0)，寬 3.0，高 3.55
+        const portalCenterX = 0.65;
+        const portalCenterY = 2.75;
+        const portalW = 3.0;
+        const portalH = 3.55;
+
+        // 左側牆體
+        const leftWall = new THREE.Mesh(new THREE.BoxGeometry(5.35, 6.2, 0.25), wallMat);
+        leftWall.position.set(-3.525, 3.1, -0.125);
+        leftWall.receiveShadow = true;
+        roomGroup.add(leftWall);
+
+        // 右側牆體
+        const rightWall = new THREE.Mesh(new THREE.BoxGeometry(4.0, 6.2, 0.25), wallMat);
+        rightWall.position.set(4.15, 3.1, -0.125);
+        rightWall.receiveShadow = true;
+        roomGroup.add(rightWall);
+
+        // 上方牆體
+        const topWall = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.675, 0.25), wallMat);
+        topWall.position.set(portalCenterX, 5.3625, -0.125);
+        topWall.receiveShadow = true;
+        roomGroup.add(topWall);
+
+        // 下方牆體
+        const bottomWall = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.975, 0.25), wallMat);
+        bottomWall.position.set(portalCenterX, 0.4875, -0.125);
+        bottomWall.receiveShadow = true;
+        roomGroup.add(bottomWall);
+
+        // 左側轉角延伸牆（營造書櫃後的空間感）
+        const sideWallLeft = new THREE.Mesh(new THREE.BoxGeometry(0.25, 6.2, 7.5), wallMat);
+        sideWallLeft.position.set(-6.1, 3.1, 2.5);
+        sideWallLeft.receiveShadow = true;
+        roomGroup.add(sideWallLeft);
+
+        // 白色古典踢腳板 (Baseboard)
+        const baseboardMat = new THREE.MeshStandardMaterial({ color: 0xeae2d6, roughness: 0.6 });
+        const baseboardMain = new THREE.Mesh(new THREE.BoxGeometry(12.4, 0.22, 0.06), baseboardMat);
+        baseboardMain.position.set(0, 0.11, 0.03);
+        baseboardMain.receiveShadow = true;
+        roomGroup.add(baseboardMain);
+
+        const baseboardTopTrim = new THREE.Mesh(new THREE.BoxGeometry(12.4, 0.03, 0.08), baseboardMat);
+        baseboardTopTrim.position.set(0, 0.225, 0.035);
+        roomGroup.add(baseboardTopTrim);
+
+        // 溫潤木地板
+        const floorTex = createWoodFloorTexture();
+        const floorMat = new THREE.MeshStandardMaterial({
+            map: floorTex,
+            roughness: 0.42,
+            metalness: 0.05
+        });
+        const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(14, 10), floorMat);
+        floorMesh.rotation.x = -Math.PI / 2;
+        floorMesh.position.set(0, 0, 3.5);
+        floorMesh.receiveShadow = true;
+        roomGroup.add(floorMesh);
+
+        // 復古波斯地毯
+        const rugTex = createRugTexture();
+        const rugMat = new THREE.MeshStandardMaterial({
+            map: rugTex,
+            roughness: 0.92
+        });
+        const rugMesh = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.025, 2.9), rugMat);
+        rugMesh.position.set(-0.55, 0.013, 2.65);
+        rugMesh.rotation.y = 0.04;
+        rugMesh.receiveShadow = true;
+        roomGroup.add(rugMesh);
+
+        // ==========================================
+        // 5. 核心視覺焦點：古典雕花金框 & 3D 破界立體畫中世界
+        // ==========================================
+        const portalGroup = new THREE.Group();
+        portalGroup.position.set(portalCenterX, portalCenterY, 0);
+        scene.add(portalGroup);
+
+        // 5.1 華麗復古金色畫框
+        const goldMat = new THREE.MeshStandardMaterial({
+            color: 0xc59838,
+            roughness: 0.28,
+            metalness: 0.82
+        });
+        const darkGoldMat = new THREE.MeshStandardMaterial({
+            color: 0x8f681c,
+            roughness: 0.4,
+            metalness: 0.75
+        });
+
+        const frameGroup = new THREE.Group();
+        portalGroup.add(frameGroup);
+
+        const fw = 0.30; // 邊框寬度
+        const fd = 0.22; // 邊框厚度
+
+        // 上下左右外框主體
+        const topBar = new THREE.Mesh(new THREE.BoxGeometry(portalW + fw * 2, fw, fd), goldMat);
+        topBar.position.set(0, portalH / 2 + fw / 2, fd / 2);
+        topBar.castShadow = true;
+        topBar.receiveShadow = true;
+        frameGroup.add(topBar);
+
+        const bottomBar = new THREE.Mesh(new THREE.BoxGeometry(portalW + fw * 2, fw, fd), goldMat);
+        bottomBar.position.set(0, -portalH / 2 - fw / 2, fd / 2);
+        bottomBar.castShadow = true;
+        bottomBar.receiveShadow = true;
+        frameGroup.add(bottomBar);
+
+        const leftBar = new THREE.Mesh(new THREE.BoxGeometry(fw, portalH, fd), goldMat);
+        leftBar.position.set(-portalW / 2 - fw / 2, 0, fd / 2);
+        leftBar.castShadow = true;
+        leftBar.receiveShadow = true;
+        frameGroup.add(leftBar);
+
+        const rightBar = new THREE.Mesh(new THREE.BoxGeometry(fw, portalH, fd), goldMat);
+        rightBar.position.set(portalW / 2 + fw / 2, 0, fd / 2);
+        rightBar.castShadow = true;
+        rightBar.receiveShadow = true;
+        frameGroup.add(rightBar);
+
+        // 內層金色立體線板與雕花浮雕裝飾
+        const innerTrimW = 0.06;
+        const innerTop = new THREE.Mesh(new THREE.BoxGeometry(portalW + 0.04, innerTrimW, fd + 0.05), darkGoldMat);
+        innerTop.position.set(0, portalH / 2 + 0.02, fd / 2 + 0.02);
+        frameGroup.add(innerTop);
+
+        const innerBot = new THREE.Mesh(new THREE.BoxGeometry(portalW + 0.04, innerTrimW, fd + 0.05), darkGoldMat);
+        innerBot.position.set(0, -portalH / 2 - 0.02, fd / 2 + 0.02);
+        frameGroup.add(innerBot);
+
+        const innerLeft = new THREE.Mesh(new THREE.BoxGeometry(innerTrimW, portalH + 0.04, fd + 0.05), darkGoldMat);
+        innerLeft.position.set(-portalW / 2 - 0.02, 0, fd / 2 + 0.02);
+        frameGroup.add(innerLeft);
+
+        const innerRight = new THREE.Mesh(new THREE.BoxGeometry(innerTrimW, portalH + 0.04, fd + 0.05), darkGoldMat);
+        innerRight.position.set(portalW / 2 + 0.02, 0, fd / 2 + 0.02);
+        frameGroup.add(innerRight);
+
+        // 四角與邊框中央巴洛克立體雕花飾塊
+        const cornerPositions = [
+            [-portalW / 2 - fw / 2, portalH / 2 + fw / 2],
+            [portalW / 2 + fw / 2, portalH / 2 + fw / 2],
+            [-portalW / 2 - fw / 2, -portalH / 2 - fw / 2],
+            [portalW / 2 + fw / 2, -portalH / 2 - fw / 2],
+            [0, portalH / 2 + fw / 2],
+            [0, -portalH / 2 - fw / 2],
+            [-portalW / 2 - fw / 2, 0],
+            [portalW / 2 + fw / 2, 0]
+        ];
+        cornerPositions.forEach(([cx, cy]) => {
+            const rosette = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.06, 12), goldMat);
+            rosette.rotation.x = Math.PI / 2;
+            rosette.position.set(cx, cy, fd + 0.02);
+            frameGroup.add(rosette);
+        });
+
+        // 5.2 畫框內部凹陷的立體油畫世界 (Diorama Box)
+        const dioramaGroup = new THREE.Group();
+        portalGroup.add(dioramaGroup);
+
+        const backdropTex = createOilPaintingBackdropTexture();
+        const backdropMat = new THREE.MeshStandardMaterial({
+            map: backdropTex,
+            roughness: 0.75
+        });
+
+        // 背景油畫牆與側壁
+        const boxDepth = 0.95;
+        const backCanvas = new THREE.Mesh(new THREE.PlaneGeometry(portalW, portalH), backdropMat);
+        backCanvas.position.set(0, 0, -boxDepth);
+        backCanvas.receiveShadow = true;
+        dioramaGroup.add(backCanvas);
+
+        const sideCanvasMat = new THREE.MeshStandardMaterial({ color: 0x556b2f, roughness: 0.9 });
+        const leftInsideWall = new THREE.Mesh(new THREE.PlaneGeometry(boxDepth, portalH), sideCanvasMat);
+        leftInsideWall.rotation.y = Math.PI / 2;
+        leftInsideWall.position.set(-portalW / 2, 0, -boxDepth / 2);
+        dioramaGroup.add(leftInsideWall);
+
+        const rightInsideWall = new THREE.Mesh(new THREE.PlaneGeometry(boxDepth, portalH), new THREE.MeshStandardMaterial({ color: 0xb89f72, roughness: 0.9 }));
+        rightInsideWall.rotation.y = -Math.PI / 2;
+        rightInsideWall.position.set(portalW / 2, 0, -boxDepth / 2);
+        dioramaGroup.add(rightInsideWall);
+
+        const topInsideWall = new THREE.Mesh(new THREE.PlaneGeometry(portalW, boxDepth), new THREE.MeshStandardMaterial({ color: 0x99b3c2, roughness: 0.9 }));
+        topInsideWall.rotation.x = Math.PI / 2;
+        topInsideWall.position.set(0, portalH / 2, -boxDepth / 2);
+        dioramaGroup.add(topInsideWall);
+
+        const bottomInsideFloor = new THREE.Mesh(new THREE.PlaneGeometry(portalW, boxDepth), new THREE.MeshStandardMaterial({ color: 0xa68c60, roughness: 0.9 }));
+        bottomInsideFloor.rotation.x = -Math.PI / 2;
+        bottomInsideFloor.position.set(0, -portalH / 2, -boxDepth / 2);
+        bottomInsideFloor.receiveShadow = true;
+        dioramaGroup.add(bottomInsideFloor);
+
+        // 5.3 畫框內景右上方：藍色百葉窗與窗台小花盆
+        const windowGroup = new THREE.Group();
+        windowGroup.position.set(0.95, 0.95, -0.78);
+        dioramaGroup.add(windowGroup);
+
+        const blueShutterMat = new THREE.MeshStandardMaterial({ color: 0x1565c0, roughness: 0.55 });
+        const darkWindowMat = new THREE.MeshStandardMaterial({ color: 0x1c2b36, roughness: 0.4 });
+        const windowPane = new THREE.Mesh(new THREE.BoxGeometry(0.65, 1.05, 0.06), darkWindowMat);
+        windowGroup.add(windowPane);
+
+        // 藍色窗格與左側百葉窗扇
+        const shutter = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1.05, 0.08), blueShutterMat);
+        shutter.position.set(-0.32, 0, 0.03);
+        windowGroup.add(shutter);
+
+        // 百葉條紋
+        for (let i = -0.4; i <= 0.4; i += 0.1) {
+            const louver = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.09), blueShutterMat);
+            louver.position.set(-0.32, i, 0.04);
+            louver.rotation.x = 0.3;
+            windowGroup.add(louver);
+        }
+
+        // 石造窗台與小陶盆
+        const sill = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.22), new THREE.MeshStandardMaterial({ color: 0x9e8c70, roughness: 0.85 }));
+        sill.position.set(-0.08, -0.56, 0.08);
+        windowGroup.add(sill);
+
+        const miniPot = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.07, 0.16, 12), new THREE.MeshStandardMaterial({ color: 0xa0522d, roughness: 0.7 }));
+        miniPot.position.set(-0.1, -0.44, 0.1);
+        windowGroup.add(miniPot);
+
+        // 5.4 畫框左側：立體攀藤綠葉與小花叢
+        const foliageGroup = new THREE.Group();
+        dioramaGroup.add(foliageGroup);
+
+        const leafColors = [0x2e5222, 0x3f6a2d, 0x558239, 0x6c9944];
+        for (let i = 0; i < 65; i++) {
+            const leafMat = new THREE.MeshStandardMaterial({
+                color: leafColors[i % leafColors.length],
+                roughness: 0.75
+            });
+            const bushSphere = new THREE.Mesh(new THREE.DodecahedronGeometry(0.14 + Math.random() * 0.12, 1), leafMat);
+            bushSphere.position.set(
+                -1.35 + Math.random() * 0.85,
+                -1.2 + Math.random() * 2.7,
+                -0.75 + Math.random() * 0.55
+            );
+            bushSphere.castShadow = true;
+            foliageGroup.add(bushSphere);
+        }
+
+        // ==========================================
+        // 6. 破框而出的 3D 小女孩、澆水壺與陶盆雛菊
+        // ==========================================
+        const foregroundPopGroup = new THREE.Group();
+        portalGroup.add(foregroundPopGroup);
+
+        // 6.1 底部大陶盆與繽紛雛菊花叢 (微微突出於畫框下緣)
+        const flowerPotGroup = new THREE.Group();
+        flowerPotGroup.position.set(-0.12, -1.35, 0.08);
+        foregroundPopGroup.add(flowerPotGroup);
+
+        const terracottaMat = new THREE.MeshStandardMaterial({ color: 0x9c5231, roughness: 0.68 });
+        const mainPotBody = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.38, 0.52, 24), terracottaMat);
+        mainPotBody.castShadow = true;
+        mainPotBody.receiveShadow = true;
+        flowerPotGroup.add(mainPotBody);
+
+        const mainPotRim = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.055, 12, 28), terracottaMat);
+        mainPotRim.rotation.x = Math.PI / 2;
+        mainPotRim.position.y = 0.24;
+        mainPotRim.castShadow = true;
+        flowerPotGroup.add(mainPotRim);
+
+        // 花盆內的茂密綠葉襯底
+        for (let i = 0; i < 28; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const r = Math.random() * 0.52;
+            const leaf = new THREE.Mesh(
+                new THREE.DodecahedronGeometry(0.13 + Math.random() * 0.06, 1),
+                new THREE.MeshStandardMaterial({ color: leafColors[i % leafColors.length], roughness: 0.7 })
+            );
+            leaf.position.set(
+                Math.cos(angle) * r,
+                0.28 + Math.random() * 0.25,
+                Math.sin(angle) * r * 0.75
+            );
+            flowerPotGroup.add(leaf);
+        }
+
+        // 建立精緻 3D 雛菊花朵函式
+        const daisyFlowers = [];
+        function createDaisy(colorHex, x, y, z, scale = 1) {
+            const flower = new THREE.Group();
+            flower.position.set(x, y, z);
+            flower.scale.setScalar(scale);
+
+            // 金黃花蕊
+            const center = new THREE.Mesh(
+                new THREE.SphereGeometry(0.045, 10, 10),
+                new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.5 })
+            );
+            center.scale.y = 0.55;
+            flower.add(center);
+
+            // 花瓣環繞
+            const petalMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.4 });
+            const petalCount = 10;
+            for (let p = 0; p < petalCount; p++) {
+                const a = (p / petalCount) * Math.PI * 2;
+                const petal = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 8), petalMat);
+                petal.scale.set(0.45, 0.18, 1.45);
+                petal.position.set(Math.cos(a) * 0.065, 0, Math.sin(a) * 0.065);
+                petal.rotation.y = -a + Math.PI / 2;
+                flower.add(petal);
+            }
+
+            // 讓花朵稍微朝向觀眾
+            flower.rotation.x = 0.45 + (Math.random() - 0.5) * 0.3;
+            flower.rotation.z = (Math.random() - 0.5) * 0.3;
+            flower.userData.baseRotX = flower.rotation.x;
+            flower.userData.phase = Math.random() * Math.PI * 2;
+            daisyFlowers.push(flower);
+            return flower;
+        }
+
+        const flowerPalette = [0xffffff, 0xffffff, 0xf8bbd0, 0xf48fb1, 0xff8a65, 0xce93d8];
+        for (let i = 0; i < 24; i++) {
+            const fx = (Math.random() - 0.5) * 1.15;
+            const fy = 0.38 + Math.random() * 0.48;
+            const fz = -0.15 + Math.random() * 0.52;
+            const col = flowerPalette[i % flowerPalette.length];
+            const daisy = createDaisy(col, fx, fy, fz, 0.85 + Math.random() * 0.35);
+            flowerPotGroup.add(daisy);
+        }
+
+        // 6.2 畫中女孩 3D 造型模型 (草帽、麻花辮、白短袖、牛仔吊帶裙)
+        const girlGroup = new THREE.Group();
+        girlGroup.position.set(0.28, -0.35, 0.05);
+        girlGroup.rotation.y = -0.28; // 微朝左下方花盆傾身
+        foregroundPopGroup.add(girlGroup);
+
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xeeb892, roughness: 0.55 });
+        const denimMat = new THREE.MeshStandardMaterial({ color: 0x1d4e89, roughness: 0.72 });
+        const whiteShirtMat = new THREE.MeshStandardMaterial({ color: 0xf7f5f0, roughness: 0.65 });
+        const hairMat = new THREE.MeshStandardMaterial({ color: 0x4a2c18, roughness: 0.65 });
+        const strawMat = new THREE.MeshStandardMaterial({ color: 0xdcc07c, roughness: 0.8 });
+
+        // 雙腿
+        const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.08, 0.85, 14), skinMat);
+        leftLeg.position.set(-0.13, -0.95, 0.02);
+        leftLeg.castShadow = true;
+        girlGroup.add(leftLeg);
+
+        const rightLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.08, 0.85, 14), skinMat);
+        rightLeg.position.set(0.14, -0.95, -0.04);
+        rightLeg.castShadow = true;
+        girlGroup.add(rightLeg);
+
+        // 牛仔吊帶裙裙擺與胸圍
+        const skirtMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.40, 0.68, 20), denimMat);
+        skirtMesh.position.set(0, -0.38, 0);
+        skirtMesh.castShadow = true;
+        girlGroup.add(skirtMesh);
+
+        // 裙擺抓皺與金屬鈕扣細節
+        const waistBelt = new THREE.Mesh(new THREE.CylinderGeometry(0.248, 0.252, 0.08, 20), denimMat);
+        waistBelt.position.set(0, -0.05, 0);
+        girlGroup.add(waistBelt);
+
+        // 白色上衣軀幹
+        const torsoShirt = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.22, 0.55, 18), whiteShirtMat);
+        torsoShirt.position.set(0, 0.26, 0);
+        torsoShirt.castShadow = true;
+        girlGroup.add(torsoShirt);
+
+        // 牛仔吊帶胸前護片與肩帶
+        const bibMesh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.42, 0.18), denimMat);
+        bibMesh.position.set(0, 0.22, 0.16);
+        girlGroup.add(bibMesh);
+
+        const strapL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.46, 0.26), denimMat);
+        strapL.position.set(-0.12, 0.34, 0.08);
+        girlGroup.add(strapL);
+
+        const strapR = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.46, 0.26), denimMat);
+        strapR.position.set(0.12, 0.34, 0.08);
+        girlGroup.add(strapR);
+
+        // 吊帶黃銅扣
+        const buttonMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.8, roughness: 0.2 });
+        [-0.12, 0.12].forEach(bx => {
+            const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.02, 10), buttonMat);
+            btn.rotation.x = Math.PI / 2;
+            btn.position.set(bx, 0.38, 0.26);
+            girlGroup.add(btn);
+        });
+
+        // 頸部與微低頭微笑的臉龐
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.16, 12), skinMat);
+        neck.position.set(0, 0.58, 0.03);
+        girlGroup.add(neck);
+
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 0.78, 0.08);
+        headGroup.rotation.x = 0.32; // 低頭專注看著澆花
+        headGroup.rotation.y = -0.18;
+        girlGroup.add(headGroup);
+
+        const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 24), skinMat);
+        headMesh.scale.set(0.92, 1.04, 0.95);
+        headMesh.castShadow = true;
+        headGroup.add(headMesh);
+
+        // 溫柔下垂的眼睫與紅潤雙頰、微笑
+        const featureMat = new THREE.MeshBasicMaterial({ color: 0x3b2214 });
+        [-0.085, 0.085].forEach(ex => {
+            const eye = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.006, 6, 12, Math.PI), featureMat);
+            eye.rotation.z = Math.PI;
+            eye.position.set(ex, 0.01, 0.215);
+            headGroup.add(eye);
+
+            const blush = new THREE.Mesh(
+                new THREE.SphereGeometry(0.035, 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0xe58a7c, transparent: true, opacity: 0.45 })
+            );
+            blush.scale.set(1.2, 0.7, 0.3);
+            blush.position.set(ex * 1.35, -0.04, 0.205);
+            headGroup.add(blush);
+        });
+
+        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), skinMat);
+        nose.position.set(0, -0.02, 0.235);
+        headGroup.add(nose);
+
+        const smile = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.006, 6, 12, Math.PI), new THREE.MeshBasicMaterial({ color: 0xa84a3c }));
+        smile.rotation.z = Math.PI;
+        smile.position.set(0, -0.075, 0.215);
+        headGroup.add(smile);
+
+        // 棕色長髮與兩側麻花辮
+        const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.252, 20, 20), hairMat);
+        hairCap.position.set(0, 0.04, -0.02);
+        headGroup.add(hairCap);
+
+        [-0.19, 0.19].forEach(bx => {
+            const braidGroup = new THREE.Group();
+            braidGroup.position.set(bx, -0.06, 0.06);
+            braidGroup.rotation.x = -0.25;
+            for (let b = 0; b < 6; b++) {
+                const knot = new THREE.Mesh(new THREE.SphereGeometry(0.048 - b * 0.004, 10, 10), hairMat);
+                knot.position.set(0, -b * 0.065, b * 0.012);
+                braidGroup.add(knot);
+            }
+            headGroup.add(braidGroup);
+        });
+
+        // 編織草帽 (Straw Boater Hat)
+        const hatGroup = new THREE.Group();
+        hatGroup.position.set(0, 0.14, -0.02);
+        hatGroup.rotation.x = -0.22;
+        headGroup.add(hatGroup);
+
+        const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.50, 0.035, 32), strawMat);
+        hatBrim.castShadow = true;
+        hatGroup.add(hatBrim);
+
+        const hatCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.19, 28), strawMat);
+        hatCrown.position.y = 0.10;
+        hatCrown.castShadow = true;
+        hatGroup.add(hatCrown);
+
+        const hatRibbon = new THREE.Mesh(new THREE.CylinderGeometry(0.263, 0.263, 0.035, 28), new THREE.MeshStandardMaterial({ color: 0x5c3a21 }));
+        hatRibbon.position.y = 0.03;
+        hatGroup.add(hatRibbon);
+
+        // 女孩雙手與手臂（握持銀色澆水壺）
+        const rightShoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.22, 12), whiteShirtMat);
+        rightShoulder.position.set(-0.26, 0.42, 0.08);
+        rightShoulder.rotation.z = 0.65;
+        rightShoulder.rotation.x = -0.5;
+        girlGroup.add(rightShoulder);
+
+        const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.05, 0.52, 12), skinMat);
+        rightArm.position.set(-0.46, 0.44, 0.30);
+        rightArm.rotation.z = 0.95;
+        rightArm.rotation.y = 0.4;
+        rightArm.castShadow = true;
+        girlGroup.add(rightArm);
+
+        const leftShoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.22, 12), whiteShirtMat);
+        leftShoulder.position.set(0.24, 0.36, 0.10);
+        leftShoulder.rotation.z = -0.35;
+        leftShoulder.rotation.x = -0.6;
+        girlGroup.add(leftShoulder);
+
+        const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.05, 0.56, 12), skinMat);
+        leftArm.position.set(0.02, 0.22, 0.38);
+        leftArm.rotation.z = 1.15;
+        leftArm.rotation.x = -0.45;
+        leftArm.castShadow = true;
+        girlGroup.add(leftArm);
+
+        // 6.3 破框突出的復古銀色金屬澆水壺 (Silver Galvanized Watering Can)
+        const wateringCanGroup = new THREE.Group();
+        // 位於畫框正前方，壺嘴明顯突出畫框平面 (Z > 0.3)
+        wateringCanGroup.position.set(-0.34, 0.14, 0.36);
+        wateringCanGroup.rotation.z = -0.68; // 傾倒澆水角度
+        wateringCanGroup.rotation.y = 0.28;
+        foregroundPopGroup.add(wateringCanGroup);
+
+        const zincMetalMat = new THREE.MeshStandardMaterial({
+            color: 0xbac4c8,
+            metalness: 0.85,
+            roughness: 0.26
+        });
+        const darkMetalMat = new THREE.MeshStandardMaterial({
+            color: 0x6e787c,
+            metalness: 0.8,
+            roughness: 0.35
+        });
+
+        // 壺身圓筒
+        const canBody = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.44, 24), zincMetalMat);
+        canBody.castShadow = true;
+        wateringCanGroup.add(canBody);
+
+        // 壺身防漏半月頂蓋與內部水面反光
+        const canRim = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.015, 10, 24), darkMetalMat);
+        canRim.rotation.x = Math.PI / 2;
+        canRim.position.y = 0.22;
+        wateringCanGroup.add(canRim);
+
+        const innerWater = new THREE.Mesh(
+            new THREE.CircleGeometry(0.21, 20),
+            new THREE.MeshStandardMaterial({ color: 0x76b5c5, metalness: 0.6, roughness: 0.1 })
+        );
+        innerWater.rotation.x = -Math.PI / 2;
+        innerWater.position.y = 0.16;
+        wateringCanGroup.add(innerWater);
+
+        // 上方弧形提把與後方握把
+        const topHandle = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.018, 10, 24, Math.PI), darkMetalMat);
+        topHandle.position.set(0, 0.20, 0);
+        wateringCanGroup.add(topHandle);
+
+        const backHandle = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.016, 10, 20, Math.PI), darkMetalMat);
+        backHandle.rotation.z = -Math.PI / 2;
+        backHandle.position.set(-0.22, 0.02, 0);
+        wateringCanGroup.add(backHandle);
+
+        // 長長向前延伸的壺嘴管與蓮蓬噴頭 (Rose Nozzle)
+        const spoutMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.065, 0.46, 16), zincMetalMat);
+        spoutMesh.position.set(0.32, 0.04, 0.06);
+        spoutMesh.rotation.z = -0.82;
+        spoutMesh.castShadow = true;
+        wateringCanGroup.add(spoutMesh);
+
+        const nozzleHead = new THREE.Mesh(new THREE.ConeGeometry(0.095, 0.09, 20), zincMetalMat);
+        nozzleHead.position.set(0.50, -0.12, 0.08);
+        nozzleHead.rotation.z = 2.32;
+        wateringCanGroup.add(nozzleHead);
+
+        const nozzleFace = new THREE.Mesh(
+            new THREE.SphereGeometry(0.092, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2.6),
+            darkMetalMat
+        );
+        nozzleFace.position.set(0.52, -0.14, 0.08);
+        nozzleFace.rotation.z = -0.82;
+        wateringCanGroup.add(nozzleFace);
+
+        // 註冊女孩與澆水壺點擊互動
+        registerInteractable(canBody, '澆水壺', () => triggerBigSplash('您晃動了銀色澆水壺，傾瀉出大量水花！'));
+        registerInteractable(headMesh, '畫中女孩', () => triggerBigSplash('畫中女孩開心地多澆了一些水，水花濺出畫框外！'));
+        registerInteractable(skirtMesh, '畫中女孩', () => triggerBigSplash('畫中女孩向您微笑，水珠源源不絕流向客廳地板！'));
+
+        // ==========================================
+        // 7. 破界動態水粒子模擬 & 地板水窪漣漪系統
+        // ==========================================
+        let waterIntensity = 1.0; // 1.0 = 100%
+        let splashBoost = 0;
+
+        // 7.1 地板真實反射水窪與擴散漣漪環
+        const puddleCenter = new THREE.Vector3(0.45, 0.012, 0.62);
+        const puddleGroup = new THREE.Group();
+        puddleGroup.position.copy(puddleCenter);
+        scene.add(puddleGroup);
+
+        // 不規則有機水窪形狀（由多個扁平圓盤交疊組成）
+        const puddleMat = new THREE.MeshStandardMaterial({
+            color: 0x9ecae1,
+            roughness: 0.04,
+            metalness: 0.88,
+            transparent: true,
+            opacity: 0.62
+        });
+
+        const mainPuddleDisk = new THREE.Mesh(new THREE.CircleGeometry(0.78, 36), puddleMat);
+        mainPuddleDisk.rotation.x = -Math.PI / 2;
+        mainPuddleDisk.scale.set(1.35, 0.82, 1);
+        puddleGroup.add(mainPuddleDisk);
+
+        const subPuddle1 = new THREE.Mesh(new THREE.CircleGeometry(0.45, 24), puddleMat);
+        subPuddle1.rotation.x = -Math.PI / 2;
+        subPuddle1.position.set(0.55, 0.001, 0.15);
+        subPuddle1.scale.set(1.4, 0.7, 1);
+        puddleGroup.add(subPuddle1);
+
+        const subPuddle2 = new THREE.Mesh(new THREE.CircleGeometry(0.38, 24), puddleMat);
+        subPuddle2.rotation.x = -Math.PI / 2;
+        subPuddle2.position.set(-0.48, 0.001, -0.12);
+        subPuddle2.scale.set(1.2, 0.8, 1);
+        puddleGroup.add(subPuddle2);
+
+        registerInteractable(mainPuddleDisk, '地板水窪', () => {
+            splashBoost = 1.6;
+            showToast('💧 您踩了地板上的水窪，激起一圈圈晶瑩漣漪！');
+        });
+
+        // 動態擴散水波紋環 (Ripple Rings)
+        const rippleRings = [];
+        for (let r = 0; r < 5; r++) {
+            const ringGeo = new THREE.RingGeometry(0.08, 0.105, 32);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.65,
+                side: THREE.DoubleSide
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 0.004;
+            ring.userData.progress = r / 5;
+            puddleGroup.add(ring);
+            rippleRings.push(ring);
+        }
+
+        // 7.2 晶瑩水柱與飛濺水珠粒子系統 (分成：壺嘴噴出、畫框溢出下墜、地板水花飛濺)
+        const DROP_COUNT = 520;
+        const dropGeo = new THREE.BufferGeometry();
+        const dropPositions = new Float32Array(DROP_COUNT * 3);
+        const dropVelocities = [];
+        const dropTypes = []; // 0: 壺嘴到花盆, 1: 畫框下緣流淌至地板, 2: 地板激起的水花
+
+        // 計算世界座標下壺嘴的位置
+        const nozzleOrigin = new THREE.Vector3(0.45, 2.52, 0.56);
+
+        function resetParticle(i, typeOverride = null) {
+            const type = typeOverride !== null ? typeOverride : (i < 160 ? 0 : (i < 390 ? 1 : 2));
+            dropTypes[i] = type;
+
+            if (type === 0) {
+                // 從澆水壺蓮蓬頭灑向花叢
+                dropPositions[i * 3] = nozzleOrigin.x + (Math.random() - 0.5) * 0.09;
+                dropPositions[i * 3 + 1] = nozzleOrigin.y + (Math.random() - 0.5) * 0.08;
+                dropPositions[i * 3 + 2] = nozzleOrigin.z + (Math.random() - 0.5) * 0.09;
+                dropVelocities[i] = {
+                    vx: (Math.random() - 0.45) * 0.45,
+                    vy: -1.2 - Math.random() * 1.1,
+                    vz: (Math.random() - 0.35) * 0.45
+                };
+            } else if (type === 1) {
+                // 從花盆與金色下畫框邊緣匯聚成兩道主水流，直接往客廳木地板傾瀉而下
+                const streamIndex = i % 2;
+                const baseX = streamIndex === 0 ? 0.38 : 0.52;
+                dropPositions[i * 3] = baseX + (Math.random() - 0.5) * 0.14;
+                dropPositions[i * 3 + 1] = 1.95 - Math.random() * 0.65;
+                dropPositions[i * 3 + 2] = 0.42 + Math.random() * 0.18;
+                dropVelocities[i] = {
+                    vx: (Math.random() - 0.5) * 0.16,
+                    vy: -1.8 - Math.random() * 1.8,
+                    vz: 0.06 + Math.random() * 0.14
+                };
+            } else {
+                // 撞擊客廳木地板後向四周彈跳的白色晶瑩水珠
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 0.24;
+                dropPositions[i * 3] = puddleCenter.x + Math.cos(angle) * radius;
+                dropPositions[i * 3 + 1] = 0.02 + Math.random() * 0.05;
+                dropPositions[i * 3 + 2] = puddleCenter.z + Math.sin(angle) * radius;
+                const speed = (0.35 + Math.random() * 0.85) * (1 + splashBoost * 0.6);
+                dropVelocities[i] = {
+                    vx: Math.cos(angle) * speed,
+                    vy: 0.85 + Math.random() * 1.45 * (1 + splashBoost * 0.5),
+                    vz: Math.sin(angle) * speed
+                };
+            }
+        }
+
+        for (let i = 0; i < DROP_COUNT; i++) {
+            resetParticle(i);
+            // 隨機打散初始高度避免同時落下
+            if (dropTypes[i] === 1) {
+                dropPositions[i * 3 + 1] = Math.random() * 1.95;
+            }
+        }
+
+        dropGeo.setAttribute('position', new THREE.BufferAttribute(dropPositions, 3));
+
+        // 繪製圓潤帶高光的水滴貼圖
+        const dropCanvas = document.createElement('canvas');
+        dropCanvas.width = 64;
+        dropCanvas.height = 64;
+        const dCtx = dropCanvas.getContext('2d');
+        const dGrad = dCtx.createRadialGradient(24, 24, 2, 32, 32, 28);
+        dGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        dGrad.addColorStop(0.45, 'rgba(200, 238, 255, 0.85)');
+        dGrad.addColorStop(1, 'rgba(150, 210, 245, 0)');
+        dCtx.fillStyle = dGrad;
+        dCtx.beginPath();
+        dCtx.arc(32, 32, 28, 0, Math.PI * 2);
+        dCtx.fill();
+
+        const dropMat = new THREE.PointsMaterial({
+            size: 0.075,
+            map: new THREE.CanvasTexture(dropCanvas),
+            transparent: true,
+            opacity: 0.9,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+
+        const waterParticles = new THREE.Points(dropGeo, dropMat);
+        scene.add(waterParticles);
+
+        // 半透明連續水柱線條（強化照片中從花盆直瀉地板的清澈水束感）
+        const streamMat = new THREE.MeshPhysicalMaterial({
+            color: 0xdff4ff,
+            transparent: true,
+            opacity: 0.42,
+            roughness: 0.08,
+            transmission: 0.6
+        });
+        const mainStream1 = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.012, 1.92, 12), streamMat);
+        mainStream1.position.set(0.39, 0.96, 0.52);
+        mainStream1.rotation.z = 0.04;
+        mainStream1.rotation.x = 0.08;
+        scene.add(mainStream1);
+
+        const mainStream2 = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.008, 1.85, 12), streamMat);
+        mainStream2.position.set(0.51, 0.92, 0.55);
+        mainStream2.rotation.z = -0.03;
+        mainStream2.rotation.x = 0.10;
+        scene.add(mainStream2);
+
+        // ==========================================
+        // 8. 客廳周邊家具陳設（左方米白雙人沙發、書櫃、立燈、前景茶几與青蘋果、右側邊桌）
+        // ==========================================
+
+        // 8.1 左側米白色布藝雙人沙發與抱枕
+        const sofaGroup = new THREE.Group();
+        sofaGroup.position.set(-3.15, 0, 1.35);
+        sofaGroup.rotation.y = 0.36;
+        scene.add(sofaGroup);
+
+        const sofaFabricMat = new THREE.MeshStandardMaterial({ color: 0xd7ccb8, roughness: 0.88 });
+        const olivePillowMat = new THREE.MeshStandardMaterial({ color: 0x4b5d33, roughness: 0.85 });
+        const rustPillowMat = new THREE.MeshStandardMaterial({ color: 0x9c5b27, roughness: 0.82 });
+
+        // 沙發底座與坐墊
+        const sofaBase = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.36, 1.05), sofaFabricMat);
+        sofaBase.position.set(0, 0.24, 0);
+        sofaBase.castShadow = true;
+        sofaBase.receiveShadow = true;
+        sofaGroup.add(sofaBase);
+
+        [-0.56, 0.56].forEach(cx => {
+            const seatCushion = new THREE.Mesh(new THREE.BoxGeometry(1.10, 0.24, 0.95), sofaFabricMat);
+            seatCushion.position.set(cx, 0.52, 0.04);
+            seatCushion.castShadow = true;
+            seatCushion.receiveShadow = true;
+            sofaGroup.add(seatCushion);
+
+            const backCushion = new THREE.Mesh(new THREE.BoxGeometry(1.10, 0.72, 0.28), sofaFabricMat);
+            backCushion.position.set(cx, 0.92, -0.34);
+            backCushion.rotation.x = -0.12;
+            backCushion.castShadow = true;
+            sofaGroup.add(backCushion);
+        });
+
+        // 沙發背板與左右扶手
+        const sofaBack = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.95, 0.22), sofaFabricMat);
+        sofaBack.position.set(0, 0.65, -0.46);
+        sofaBack.castShadow = true;
+        sofaGroup.add(sofaBack);
+
+        [-1.15, 1.15].forEach(ax => {
+            const armrest = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.68, 1.08), sofaFabricMat);
+            armrest.position.set(ax, 0.52, 0.02);
+            armrest.castShadow = true;
+            sofaGroup.add(armrest);
+        });
+
+        // 橄欖綠抱枕與鏽橘色抱枕
+        const greenPillow = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.44, 0.18), olivePillowMat);
+        greenPillow.position.set(-0.62, 0.80, -0.05);
+        greenPillow.rotation.set(-0.25, 0.2, 0.12);
+        greenPillow.castShadow = true;
+        sofaGroup.add(greenPillow);
+
+        const orangePillow = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.50, 0.20), rustPillowMat);
+        orangePillow.position.set(0.68, 0.86, -0.08);
+        orangePillow.rotation.set(-0.18, -0.28, -0.08);
+        orangePillow.castShadow = true;
+        sofaGroup.add(orangePillow);
+
+        // 8.2 沙發後方的立燈 (百褶米白燈罩，支援點擊開關)
+        const lampGroup = new THREE.Group();
+        lampGroup.position.set(-2.65, 0, -0.75);
+        scene.add(lampGroup);
+
+        const brassPoleMat = new THREE.MeshStandardMaterial({ color: 0x5c4228, metalness: 0.6, roughness: 0.4 });
+        const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.28, 0.05, 20), brassPoleMat);
+        lampBase.position.y = 0.025;
+        lampGroup.add(lampBase);
+
+        const lampPole = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 2.55, 12), brassPoleMat);
+        lampPole.position.y = 1.3;
+        lampPole.castShadow = true;
+        lampGroup.add(lampPole);
+
+        const shadeMat = new THREE.MeshStandardMaterial({
+            color: 0xf5ebd6,
+            emissive: 0xffb74d,
+            emissiveIntensity: 0.42,
+            roughness: 0.65,
+            side: THREE.DoubleSide
+        });
+        const lampShade = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.44, 0.55, 28, 1, true), shadeMat);
+        lampShade.position.y = 2.55;
+        lampShade.castShadow = true;
+        lampGroup.add(lampShade);
+
+        registerInteractable(lampShade, '復古百褶立燈', () => {
+            lampIsOn = !lampIsOn;
+            floorLampLight.intensity = lampIsOn ? 0.95 : 0;
+            shadeMat.emissiveIntensity = lampIsOn ? 0.45 : 0;
+            showToast(lampIsOn ? '💡 您點亮了角落的百褶立燈，增添溫暖光暈！' : '🌙 您關閉了立燈，凸顯陽光與水影！');
+        });
+
+        // 8.3 左後方深胡桃木書櫃、藏書與綠植
+        const shelfGroup = new THREE.Group();
+        shelfGroup.position.set(-4.65, 0, -0.55);
+        shelfGroup.rotation.y = 0.25;
+        scene.add(shelfGroup);
+
+        const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x4a2c18, roughness: 0.55 });
+        const shelfBody = new THREE.Mesh(new THREE.BoxGeometry(1.45, 3.1, 0.52), darkWoodMat);
+        shelfBody.position.y = 1.55;
+        shelfBody.castShadow = true;
+        shelfGroup.add(shelfBody);
+
+        // 書櫃上的綠植盆栽
+        const topPlantPot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.14, 0.28, 14), new THREE.MeshStandardMaterial({ color: 0x3b3530 }));
+        topPlantPot.position.set(0.1, 3.24, 0);
+        shelfGroup.add(topPlantPot);
+
+        for (let l = 0; l < 18; l++) {
+            const leaf = new THREE.Mesh(new THREE.DodecahedronGeometry(0.14, 1), new THREE.MeshStandardMaterial({ color: 0x355e27, roughness: 0.7 }));
+            leaf.position.set(
+                0.1 + (Math.random() - 0.5) * 0.55,
+                3.45 + Math.random() * 0.65,
+                (Math.random() - 0.5) * 0.45
+            );
+            shelfGroup.add(leaf);
+        }
+
+        // 8.4 左前景實木茶几、木碗青蘋果、疊書與白瓷花瓶
+        const coffeeTableGroup = new THREE.Group();
+        coffeeTableGroup.position.set(-2.35, 0, 3.25);
+        coffeeTableGroup.rotation.y = 0.34;
+        scene.add(coffeeTableGroup);
+
+        const tableWoodMat = new THREE.MeshStandardMaterial({ color: 0x6b3e1d, roughness: 0.45 });
+        const tableTop = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.09, 1.15), tableWoodMat);
+        tableTop.position.y = 0.78;
+        tableTop.castShadow = true;
+        tableTop.receiveShadow = true;
+        coffeeTableGroup.add(tableTop);
+
+        [[-0.78, -0.48], [0.78, -0.48], [-0.78, 0.48], [0.78, 0.48]].forEach(([lx, lz]) => {
+            const leg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.78, 0.09), tableWoodMat);
+            leg.position.set(lx, 0.39, lz);
+            leg.castShadow = true;
+            coffeeTableGroup.add(leg);
+        });
+
+        // 木碗與五顆翠綠青蘋果
+        const appleBowlGroup = new THREE.Group();
+        appleBowlGroup.position.set(0.28, 0.83, -0.08);
+        coffeeTableGroup.add(appleBowlGroup);
+
+        const bowlMesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.28, 0.16, 0.14, 24),
+            new THREE.MeshStandardMaterial({ color: 0x59371c, roughness: 0.5 })
+        );
+        bowlMesh.position.y = 0.07;
+        bowlMesh.castShadow = true;
+        appleBowlGroup.add(bowlMesh);
+
+        const appleMat = new THREE.MeshStandardMaterial({ color: 0x7cb342, roughness: 0.25, metalness: 0.05 });
+        const appleOffsets = [
+            [-0.09, 0.16, 0.04],
+            [0.09, 0.16, 0.05],
+            [0.0, 0.16, -0.09],
+            [-0.08, 0.21, -0.05],
+            [0.07, 0.22, -0.02]
+        ];
+        const apples = [];
+        appleOffsets.forEach(([ax, ay, az]) => {
+            const apple = new THREE.Mesh(new THREE.SphereGeometry(0.078, 16, 16), appleMat);
+            apple.scale.y = 0.92;
+            apple.position.set(ax, ay, az);
+            apple.userData.baseY = ay;
+            apple.castShadow = true;
+            appleBowlGroup.add(apple);
+            apples.push(apple);
+            registerInteractable(apple, '新鮮青蘋果', () => {
+                apples.forEach((a, idx) => {
+                    a.userData.jumpVel = 0.08 + idx * 0.015;
+                });
+                showToast('🍏 清脆的青蘋果在木碗裡輕快跳動了一下！');
+            });
+        });
+
+        // 茶几上的兩本厚書與米白圓肚花瓶
+        const bookMat1 = new THREE.MeshStandardMaterial({ color: 0xd8cbb4, roughness: 0.8 });
+        const book1 = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.06, 0.26), bookMat1);
+        book1.position.set(-0.22, 0.855, 0.16);
+        book1.rotation.y = 0.15;
+        book1.castShadow = true;
+        coffeeTableGroup.add(book1);
+
+        const book2 = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.055, 0.23), bookMat1);
+        book2.position.set(-0.22, 0.91, 0.16);
+        book2.rotation.y = 0.05;
+        book2.castShadow = true;
+        coffeeTableGroup.add(book2);
+
+        const ceramicMat = new THREE.MeshStandardMaterial({ color: 0xc8c0b0, roughness: 0.35 });
+        const leftVase = new THREE.Mesh(new THREE.SphereGeometry(0.18, 20, 20), ceramicMat);
+        leftVase.scale.set(1, 1.25, 1);
+        leftVase.position.set(-0.56, 0.98, 0.12);
+        leftVase.castShadow = true;
+        coffeeTableGroup.add(leftVase);
+
+        for (let i = 0; i < 12; i++) {
+            const leaf = new THREE.Mesh(new THREE.DodecahedronGeometry(0.085, 1), new THREE.MeshStandardMaterial({ color: 0x3b5e28 }));
+            leaf.position.set(
+                -0.56 + (Math.random() - 0.5) * 0.26,
+                1.24 + Math.random() * 0.22,
+                0.12 + (Math.random() - 0.5) * 0.26
+            );
+            coffeeTableGroup.add(leaf);
+        }
+
+        // 8.5 右側木質邊几、白瓷植栽與植物圖鑑畫框
+        const rightTableGroup = new THREE.Group();
+        rightTableGroup.position.set(3.25, 0, 0.55);
+        scene.add(rightTableGroup);
+
+        const sideTableTop = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.06, 0.78), tableWoodMat);
+        sideTableTop.position.y = 1.12;
+        sideTableTop.castShadow = true;
+        rightTableGroup.add(sideTableTop);
+
+        const sideTableDrawer = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.22, 0.72), tableWoodMat);
+        sideTableDrawer.position.y = 0.55;
+        sideTableDrawer.castShadow = true;
+        rightTableGroup.add(sideTableDrawer);
+
+        [[-0.50, -0.32], [0.50, -0.32], [-0.50, 0.32], [0.50, 0.32]].forEach(([lx, lz]) => {
+            const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.12, 0.06), tableWoodMat);
+            leg.position.set(lx, 0.56, lz);
+            leg.castShadow = true;
+            rightTableGroup.add(leg);
+        });
+
+        // 邊桌上的陶罐綠植與靠牆相框
+        const rightVase = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 18), ceramicMat);
+        rightVase.scale.set(1, 1.3, 1);
+        rightVase.position.set(-0.22, 1.32, 0.05);
+        rightVase.castShadow = true;
+        rightTableGroup.add(rightVase);
+
+        for (let i = 0; i < 10; i++) {
+            const leaf = new THREE.Mesh(new THREE.DodecahedronGeometry(0.075, 1), new THREE.MeshStandardMaterial({ color: 0x385e26 }));
+            leaf.position.set(
+                -0.22 + (Math.random() - 0.5) * 0.25,
+                1.56 + Math.random() * 0.26,
+                0.05 + (Math.random() - 0.5) * 0.22
+            );
+            rightTableGroup.add(leaf);
+        }
+
+        const botanicalFrame = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.62, 0.04), tableWoodMat);
+        botanicalFrame.position.set(0.26, 1.44, -0.18);
+        botanicalFrame.rotation.x = -0.12;
+        botanicalFrame.castShadow = true;
+        rightTableGroup.add(botanicalFrame);
+
+        const botanicalPaper = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.54), new THREE.MeshStandardMaterial({ color: 0xe6dec8 }));
+        botanicalPaper.position.set(0, 0, 0.022);
+        botanicalFrame.add(botanicalPaper);
+
+        // ==========================================
+        // 9. UI 控制邏輯、相機平滑過渡與點擊事件
+        // ==========================================
+        let targetCamPos = null;
+        let targetLookAt = null;
+
+        const cameraPresets = {
+            overview: {
+                pos: new THREE.Vector3(-1.3, 2.35, 6.6),
+                look: new THREE.Vector3(0.15, 2.05, 0)
+            },
+            portal: {
+                pos: new THREE.Vector3(0.35, 2.65, 3.05),
+                look: new THREE.Vector3(0.55, 2.35, 0.15)
+            },
+            puddle: {
+                pos: new THREE.Vector3(-0.65, 0.72, 2.45),
+                look: new THREE.Vector3(0.45, 0.35, 0.55)
+            },
+            sofa: {
+                pos: new THREE.Vector3(-3.35, 2.15, 4.45),
+                look: new THREE.Vector3(0.55, 2.15, 0.15)
+            }
+        };
+
+        document.querySelectorAll('.cam-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.cam-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const key = btn.dataset.cam;
+                const preset = cameraPresets[key];
+                if (preset) {
+                    targetCamPos = preset.pos.clone();
+                    targetLookAt = preset.look.clone();
+                }
+            });
+        });
+
+        // 當使用者主動拖曳畫面時，取消預設鏡頭自動插值
+        controls.addEventListener('start', () => {
+            targetCamPos = null;
+            targetLookAt = null;
+        });
+
+        // 澆水水量滑桿
+        const waterSlider = document.getElementById('water-slider');
+        const waterValLabel = document.getElementById('water-val-label');
+        waterSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10);
+            waterIntensity = val / 100;
+            waterValLabel.textContent = `${val}%`;
+            // 同步調整地板水窪大小與水束粗細
+            const puddleScale = Math.max(0.15, 0.4 + waterIntensity * 0.6);
+            puddleGroup.scale.set(puddleScale, 1, puddleScale);
+            mainStream1.visible = waterIntensity > 0.05;
+            mainStream2.visible = waterIntensity > 0.15;
+            mainStream1.scale.set(waterIntensity, 1, waterIntensity);
+            mainStream2.scale.set(waterIntensity, 1, waterIntensity);
+        });
+
+        // 畫框立體破界景深滑桿
+        const depthSlider = document.getElementById('depth-slider');
+        const depthValLabel = document.getElementById('depth-val-label');
+        depthSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10);
+            const ratio = val / 100;
+            depthValLabel.textContent = `${val}%`;
+            // 調整女孩與澆水壺向前突出畫框的程度，以及背景內縮深度
+            foregroundPopGroup.position.z = (ratio - 1) * 0.28;
+            dioramaGroup.scale.z = ratio;
+        });
+
+        // 室內光影氛圍切換
+        document.querySelectorAll('.light-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.light-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const mode = btn.dataset.light;
+                if (mode === 'afternoon') {
+                    ambientLight.color.setHex(0xfff3e0);
+                    ambientLight.intensity = 0.58;
+                    sunLight.color.setHex(0xfff1d6);
+                    sunLight.intensity = 1.15;
+                    portalLight.intensity = 1.1;
+                    floorLampLight.intensity = lampIsOn ? 0.95 : 0;
+                    scene.background.setHex(0x1f1b17);
+                } else if (mode === 'golden') {
+                    ambientLight.color.setHex(0xffcca8);
+                    ambientLight.intensity = 0.42;
+                    sunLight.color.setHex(0xff8c42);
+                    sunLight.intensity = 1.35;
+                    portalLight.intensity = 1.25;
+                    floorLampLight.intensity = lampIsOn ? 1.2 : 0;
+                    scene.background.setHex(0x1c130e);
+                } else if (mode === 'night') {
+                    ambientLight.color.setHex(0x8ea4d2);
+                    ambientLight.intensity = 0.22;
+                    sunLight.color.setHex(0x6c88c4);
+                    sunLight.intensity = 0.28;
+                    portalLight.intensity = 1.25;
+                    lampIsOn = true;
+                    floorLampLight.intensity = 1.65;
+                    shadeMat.emissiveIntensity = 0.7;
+                    scene.background.setHex(0x0d0f14);
+                }
+            });
+        });
+
+        // 傾倒大水花按鈕與自動環繞按鈕
+        let toastTimeout = null;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastText = document.getElementById('toast-text');
+            toastText.textContent = msg;
+            toast.classList.remove('opacity-0', '-translate-y-2');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', '-translate-y-2');
+            }, 3000);
+        }
+
+        function triggerBigSplash(customMsg) {
+            splashBoost = 2.0;
+            showToast(customMsg || '🌊 畫中女孩傾倒澆水壺，大量水花從畫框湧出濺落木地板！');
+        }
+
+        document.getElementById('splash-btn').addEventListener('click', () => triggerBigSplash());
+
+        const autoRotateBtn = document.getElementById('autorotate-btn');
+        autoRotateBtn.addEventListener('click', () => {
+            controls.autoRotate = !controls.autoRotate;
+            controls.autoRotateSpeed = 1.4;
+            autoRotateBtn.classList.toggle('active', controls.autoRotate);
+            autoRotateBtn.innerHTML = controls.autoRotate ? '<span>🔄</span> 自動環繞：開' : '<span>🔄</span> 自動環繞：關';
+        });
+
+        // 手機版收合控制面板
+        const toggleUiBtn = document.getElementById('toggle-ui-btn');
+        const controlPanel = document.getElementById('control-panel');
+        toggleUiBtn.addEventListener('click', () => {
+            controlPanel.classList.toggle('hidden');
+            toggleUiBtn.textContent = controlPanel.classList.contains('hidden') ? '展開控制' : '收合選單';
+        });
+
+        // Raycaster 3D 物件點擊偵測
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        let downPos = { x: 0, y: 0 };
+
+        window.addEventListener('pointerdown', (e) => {
+            downPos.x = e.clientX;
+            downPos.y = e.clientY;
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            // 排除拖曳旋轉鏡頭的操作
+            if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 6) return;
+            if (e.target !== renderer.domElement) return;
+
+            pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+            pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(pointer, camera);
+            const hits = raycaster.intersectObjects(interactables, true);
+            if (hits.length > 0) {
+                let obj = hits[0].object;
+                while (obj && !obj.userData.onClick) {
+                    obj = obj.parent;
+                }
+                if (obj && obj.userData.onClick) {
+                    obj.userData.onClick();
+                }
+            }
+        });
+
+        // ==========================================
+        // 10. 主動畫迴圈 (水流物理、漣漪擴散、女孩與花朵微動)
+        // ==========================================
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.05);
+            const elapsed = clock.getElapsedTime();
+
+            // 1. 相機平滑飛行過渡
+            if (targetCamPos && targetLookAt) {
+                camera.position.lerp(targetCamPos, 0.07);
+                controls.target.lerp(targetLookAt, 0.07);
+                if (camera.position.distanceTo(targetCamPos) < 0.03) {
+                    targetCamPos = null;
+                    targetLookAt = null;
+                }
+            }
+            controls.update();
+
+            // 2. 傾倒水花加成衰減與澆水壺動態傾角
+            if (splashBoost > 0) {
+                splashBoost = Math.max(0, splashBoost - dt * 1.1);
+            }
+            const tiltWave = Math.sin(elapsed * 2.2) * 0.035 - splashBoost * 0.14;
+            wateringCanGroup.rotation.z = -0.68 + tiltWave;
+            headGroup.rotation.z = Math.sin(elapsed * 1.5) * 0.03;
+
+            // 3. 雛菊受水流衝擊的輕微搖曳
+            daisyFlowers.forEach((f) => {
+                f.rotation.x = f.userData.baseRotX + Math.sin(elapsed * 5 + f.userData.phase) * 0.05 * waterIntensity;
+            });
+
+            // 4. 青蘋果點擊跳動回彈
+            apples.forEach((apple) => {
+                if (apple.userData.jumpVel) {
+                    apple.position.y += apple.userData.jumpVel;
+                    apple.userData.jumpVel -= 0.008;
+                    if (apple.position.y <= apple.userData.baseY) {
+                        apple.position.y = apple.userData.baseY;
+                        apple.userData.jumpVel = 0;
+                    }
+                }
+            });
+
+            // 5. 更新水珠粒子下落與地板濺射
+            const effectiveFlow = waterIntensity + splashBoost * 0.65;
+            waterParticles.visible = effectiveFlow > 0.02;
+
+            if (waterParticles.visible) {
+                const posArr = dropGeo.attributes.position.array;
+                for (let i = 0; i < DROP_COUNT; i++) {
+                    const v = dropVelocities[i];
+                    const t = dropTypes[i];
+
+                    posArr[i * 3] += v.vx * dt * effectiveFlow;
+                    posArr[i * 3 + 1] += v.vy * dt * (t === 2 ? 1 : effectiveFlow);
+                    posArr[i * 3 + 2] += v.vz * dt * effectiveFlow;
+
+                    if (t === 2) {
+                        // 地板濺起的水珠受重力回落
+                        v.vy -= 4.8 * dt;
+                        if (posArr[i * 3 + 1] <= 0.01) {
+                            resetParticle(i, 2);
+                        }
+                    } else if (t === 0) {
+                        // 壺嘴灑落花叢
+                        v.vy -= 2.2 * dt;
+                        if (posArr[i * 3 + 1] < 1.55) {
+                            resetParticle(i, 0);
+                        }
+                    } else {
+                        // 從畫框下緣直落木地板的水柱
+                        v.vy -= 3.2 * dt;
+                        if (posArr[i * 3 + 1] <= 0.02) {
+                            resetParticle(i, 1);
+                        }
+                    }
+                }
+                dropGeo.attributes.position.needsUpdate = true;
+            }
+
+            // 6. 地板水窪漣漪擴散動畫
+            rippleRings.forEach((ring) => {
+                ring.userData.progress += dt * (0.55 + effectiveFlow * 0.35);
+                if (ring.userData.progress > 1) {
+                    ring.userData.progress -= 1;
+                }
+                const p = ring.userData.progress;
+                const scale = 0.3 + p * 6.5;
+                ring.scale.set(scale * 1.25, scale * 0.85, 1);
+                ring.material.opacity = (1 - p) * 0.55 * Math.min(1.2, effectiveFlow);
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = function () {
+            animate();
+        };
+    </script>
+</body>
+</html>
